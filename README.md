@@ -3,6 +3,10 @@
 This repository is used to get started with Python in the Software for Science minor.
 Authors: Mats Otten & Stefan Schokker
 
+## Purpose
+
+this programme returns a list of trash bins or monuments
+
 ## Installation
 
 First set-up a Python environment for yourself. This project requires Python3.
