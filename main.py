@@ -1,5 +1,7 @@
 from api.amsterdam_api import AmsterdamApi
 from api.ns_api import NSApi
+import json
+
 
 def trash_bins():
     amsterdam_api = AmsterdamApi()
@@ -32,21 +34,45 @@ def trash_bins():
                 monument['address']
             )
 
+
 def main():
     print("NS API Test")
     ns_api = NSApi()
 
-    # Get a list of train stations
-    #print(ns_api.get_train_stations())
+    # Get stations and disruptions
+    stations = ns_api.get_train_stations()
+    disruptions = ns_api.get_disruptions()
 
-    # Get a list of disruptions
-    #print(ns_api.get_disruptions())
+    print(stations)
+    print(disruptions)
+
+    # key: station code, 0: number of times encountered in disruptions list, 1: total counted delay for station
+    dstations = dict()
+
+    # Create a lookup table for easy conversion later on
+    ids = dict()
+    for a in stations:
+        ids.update({str(a['code']).lower(): a['id']})
+
+    # Create list of impacted stations with counts
+    for a in disruptions:
+        for b in a['stations']:
+            # Update count
+            if b not in dstations:
+                dstations.update({b: [1, 0]})
+            else:
+                old = dstations[b][0]
+                dstations.update({b: [(old + 1), 0]})
+
+            departures = ns_api.get_departures(ids[b])
+            print(departures)
+
+    print("percentage of affected stations: " + str(len(dstations) / len(stations) * 100) + "%\n")
 
     # Get all the departure trains from one train station (direction and delay in seconds)
     # Use id from get_train_stations() as identifier.
-    #print(ns_api.get_departures("8400057"))
+    print(ns_api.get_departures("8400045"))
 
 
 if __name__ == "__main__":
     main()
-
