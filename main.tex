@@ -1,0 +1,193 @@
+\documentclass[a4paper, 12pt, one column]{article}
+
+%% Language and font encodings. This says how to do hyphenation on end of lines.
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage[T1]{fontenc}
+
+%% Sets page size and margins. You can edit this to your liking
+\usepackage[top=1.3cm, bottom=2.0cm, outer=2.5cm, inner=2.5cm, heightrounded,
+marginparwidth=1.5cm, marginparsep=0.4cm, margin=2.5cm]{geometry}
+
+%% Useful packages
+\usepackage{graphicx} %allows you to use jpg or png images. PDF is still recommended
+\graphicspath{ {./images/} } % Sets base path for images
+\usepackage[colorlinks=False]{hyperref} % add links inside PDF files
+\usepackage{amsmath}  % Math fonts
+\usepackage{amsfonts} %
+\usepackage{amssymb}  %
+\usepackage{subcaption}
+
+\usepackage{listings}
+\usepackage{color}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{frame=tb,
+  language=Python,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\title{NS API with python}
+\author{Stefan Schokker}
+\date{September 2019}
+
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+    \url{https://github.com/SquaredPotato/hva-sfs-python-example}
+\end{center}
+
+\section{Introduction}
+For this assignment we take a look at the station data NS provides through their API. First we want to see what stations have to do with the most disruptions, and then the stations with the most delays. 
+
+\section{Setup}
+The code starts of with some preparations:
+\begin{lstlisting}
+# Get stations and disruptions
+stations = ns_api.get_train_stations()
+disruptions = ns_api.get_disruptions()
+
+# Create a lookup table of just codes and ids for use later on
+ids = dict()
+cod = dict()
+
+for a in stations:
+    ids.update({str(a['code']).lower(): a['id']})
+    cod.update({a['id']: str(a['code']).lower()})
+\end{lstlisting}
+The code also uses another simple class "StationData" to store the data we want to collect and offer some sorting capability, but it's not included because it's not important to understand the code.
+\newpage
+\subsection{Disruptions}
+Now we can start with compiling a list of all disrupted stations:
+\begin{lstlisting}
+dstations = dict()
+
+# Create list of impacted stations with counts
+	for a in disruptions:
+		for b in a['stations']:
+			# Update count
+			if b not in dstations:
+				for c in stations:  # Lookup station name
+					if c['code'] == str(b).upper():
+						dstations.update({b: StationData(disrupted=1, name=c['name'])})
+						break
+			else:
+				dstations[b].disrupted += 1
+\end{lstlisting}
+To get the results we want we have to sort our dictionary and print, in our case, the first ten results:
+\begin{lstlisting}
+sorted_dstations = sorted(dstations.values(), key=StationData.getdisrupts, reverse=True)
+
+print("percentage of disrupted stations: " + str(len(dstations) / len(stations) * 100) + "%\n\nTop 10:\n")
+
+for i in range(0, min(len(dstations), 10)):
+	print(i + 1, ": ", sorted_dstations[i].name, " - ", sorted_dstations[i].disrupted)
+\end{lstlisting}
+The StationData.getdisrupts is again part of the StationData class. The function simply returns the number of disrupts for the instance it's in. the Reverse parameter is set to True because we want the biggest numbers to be the first in the list.
+
+\newpage
+\subsection{Delays}
+To calculate the delays we start with the same preparations as before, after wich we continue with a whole lot of nested for loops (this part runs very slow):
+\begin{lstlisting}
+del dstations
+	dstations = dict()
+
+	for a in stations:  # Loop through all stations
+		departures = cache.get(a['id'])
+		# get() returns None when the station is outside the NL
+		if departures is not None:
+			for b in departures:
+			    # Somehow not all departures have a station
+				if len(departures[b]['stations']) > 0:
+					for c in departures[b]['stations']:
+						delay_seconds = int(departures[b]['delay_seconds'])
+						if delay_seconds > 0:
+							if c in dstations:  # Update delay count
+								dstations[c].delays += 1
+								dstations[c].totalDelay += delay_seconds
+							else:
+								for d in stations:  # Lookup station name
+									if d['id'] == str(c):
+										dstations.update(
+											{c: StationData(name=d['name'], delays=1, totaldelay=delay_seconds)})
+										break
+\end{lstlisting}
+You may have noticed the "cache.get()" call on the 5th line. This is a seperate class I made in an attempt to lower the amount of calls that had to made to the API, and to make it easier to follow a train. I unfortunately didn't end up using that functionality so it's the same as a direct API call. 
+To get the results of all this looping, we sort the list again, and again:
+\begin{lstlisting}
+sorted_dstations = sorted(dstations.values(), key=StationData.getdelays, reverse=True)
+print("Stations with most delays: ")
+for i in range(0, min(len(dstations), 10)):
+	print(i + 1, ": ", sorted_dstations[i].name, " - ", sorted_dstations[i].delays)
+
+sorted_dstations = sorted(dstations.values(), key=StationData.gettotaldelay, reverse=True)
+print("Stations with longest delays: ")
+for i in range(0, min(len(dstations), 10)):
+	print(i + 1, ": ", sorted_dstations[i].name, " - ", sorted_dstations[i].totalDelay)
+\end{lstlisting}
+\newpage
+\section{Results}
+The results for the disruptions are as follows:
+\begin{lstlisting}
+percentage of disrupted stations: 46.616541353383454%
+
+Top 10:
+
+1 :  Oldenzaal  -  6
+2 :  Arnhem Centraal  -  6
+3 :  Zwolle  -  5
+4 :  Nijmegen  -  5
+5 :  Schiphol Airport  -  5
+6 :  Almelo  -  4
+7 :  Breda  -  4
+8 :  Elst  -  4
+9 :  Leeuwarden  -  4
+10 :  Rijssen  -  3
+\end{lstlisting}
+As for the delays:
+\begin{lstlisting}
+Stations with most delays:
+1 :  Zaandam  -  10
+2 :  Purmerend  -  10
+3 :  Hoorn  -  10
+4 :  Wierden  -  7
+5 :  Geldermalsen  -  5
+6 :  Utrecht Centraal  -  4
+7 :  s-Hertogenbosch  -  4
+8 :  Eindhoven  -  4
+9 :  Helmond  -  4
+10 :  Zoetermeer  -  4
+
+Stations with longest delays:
+1 :  Zaandam  -  11950
+2 :  Purmerend  -  11950
+3 :  Hoorn  -  11950
+4 :  Wierden  -  2114
+5 :  Utrecht Centraal  -  1068
+6 :  s-Hertogenbosch  -  1068
+7 :  Eindhoven  -  1068
+8 :  Helmond  -  1068
+9 :  Geldermalsen  -  535
+10 :  Rotterdam Alexander  -  320
+\end{lstlisting}
+\section{Notes}
+The "calculations" used are not described because they are too trivial. Most of the code is just to sift through the data given by the API which is also quite basic. To look at everything in more detail and to run the code yourself visit the git repository given on the first page. Remember to insert your own API key in API/ns\_api.py.
+\end{document}
